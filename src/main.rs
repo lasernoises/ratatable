@@ -1,3 +1,4 @@
+use bumpalo::Bump;
 use crossterm::event::KeyCode;
 use rat_ftable::{Table, TableData, TableState, TableStyle, selection::CellSelection};
 use ratatui::{
@@ -25,7 +26,7 @@ impl<'a> TableData<'a> for &'a Data {
 
     fn render_cell(
         &self,
-        ctx: &rat_ftable::TableContext,
+        _ctx: &rat_ftable::TableContext,
         column: usize,
         row: usize,
         area: ratatui::prelude::Rect,
@@ -45,6 +46,43 @@ impl Default for Data {
             ],
         }
     }
+}
+
+pub enum Cell {}
+
+pub enum CellValue {}
+
+pub trait TableView {
+    type State;
+
+    fn widths<'bump>(
+        &self,
+        state: &Self::State,
+        bump: &'bump Bump,
+    ) -> &'bump mut dyn Iterator<Item = Constraint>;
+
+    fn column_labels<'a, 'bump>(
+        &'a self,
+        state: &'a Self::State,
+        bump: &'bump Bump,
+    ) -> &'bump mut dyn Iterator<Item = &'a str>;
+
+    fn row<'a, 'bump>(
+        &'a mut self,
+        state: &'a mut Self::State,
+        bump: &'bump Bump,
+    ) -> &'bump mut dyn Iterator<Item = Cell>;
+
+    fn save_cell(&mut self, state: &mut Self::State, row: usize, column: usize, value: CellValue);
+
+    fn new_row(&mut self, state: &mut Self::State);
+
+    fn open_cell(
+        &mut self,
+        state: &mut Self::State,
+        row: usize,
+        column: usize,
+    ) -> Box<dyn TableView<State = Self::State>>;
 }
 
 fn main() {
