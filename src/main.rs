@@ -16,6 +16,7 @@ use wraptatui::{
     },
 };
 
+mod database;
 pub enum Cell<'a> {
     Text(&'a str),
 }
