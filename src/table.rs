@@ -1,16 +1,22 @@
+use std::any::Any;
+
 use crossterm::event::KeyCode;
 use ratatui::{
     layout::{Constraint, Layout},
     style::{Color, Style},
     widgets::Widget,
 };
-use wraptatui::{Pass, PassReturn};
+use wraptatui::{
+    Pass, PassReturn, draw, handle_key_event,
+    widgets::textbox::{Input, textbox},
+};
 
-use crate::{Column, TableView};
+use crate::{Cell, CellUpdate, Column, TableView};
 
 pub struct SelectedCell {
     row: usize,
     column: usize,
+    editing: Option<(CellUpdate, Box<dyn Any>)>,
 }
 
 pub struct State<S> {
@@ -47,6 +53,8 @@ pub fn table<'a, S: 'static>(
             // TODO: handle overscroll when resizing and scroll offset being larger than row count
             let visible_rows = (row_count - state.scroll_offset).min(area.height as usize - 1);
 
+            let mut cursor_position = None;
+
             for (column, area) in areas.iter().enumerate() {
                 let mut label_area = *area;
                 label_area.height = 1;
@@ -60,7 +68,7 @@ pub fn table<'a, S: 'static>(
                     area.height = 1;
                     area.y += i as u16 + 1;
 
-                    if let Some(selected) = &state.selected_cell
+                    if let Some(selected) = &mut state.selected_cell
                         && selected.row == row
                         && selected.column == column
                     {
@@ -71,6 +79,18 @@ pub fn table<'a, S: 'static>(
                                 ..Default::default()
                             },
                         );
+
+                        if let Some((update, state)) = &mut selected.editing {
+                            cursor_position = match update {
+                                CellUpdate::Text(input) => draw(
+                                    &mut |p| textbox(p, input),
+                                    state.downcast_mut().unwrap(),
+                                    area,
+                                    buffer,
+                                ),
+                            };
+                            continue;
+                        }
                     }
 
                     match state.view.cell(view_state, row, column) {
@@ -79,51 +99,102 @@ pub fn table<'a, S: 'static>(
                 }
             }
 
-            None
+            cursor_position
         },
         |view_state, state, event| {
-            let row_count = state.view.row_count(view_state);
+            if let Some(ref mut selected_cell) = state.selected_cell
+                && let Some((ref mut update, ref mut widget_state)) = selected_cell.editing
+            {
+                (match update {
+                    CellUpdate::Text(input) => handle_key_event(
+                        &mut |p| textbox(p, input),
+                        widget_state.downcast_mut().unwrap(),
+                        event,
+                    ),
+                }) || (match event.code {
+                    KeyCode::Esc => {
+                        state.view.save_cell(
+                            view_state,
+                            selected_cell.row,
+                            selected_cell.column,
+                            selected_cell.editing.take().unwrap().0,
+                        );
 
-            match event.code {
-                KeyCode::Left | KeyCode::Char('h') => {
-                    if let Some(selected) = &mut state.selected_cell {
-                        selected.column = selected.column.saturating_sub(1);
-                    } else {
-                        state.selected_cell = Some(SelectedCell {
-                            row: 0,
-                            column: state.columns.len() - 1,
-                        });
+                        true
                     }
-                    true
-                }
-                KeyCode::Right | KeyCode::Char('l') => {
-                    if let Some(selected) = &mut state.selected_cell {
-                        selected.column = (selected.column + 1).min(state.columns.len() - 1);
-                    } else {
-                        state.selected_cell = Some(SelectedCell { row: 0, column: 0 });
+                    _ => false,
+                })
+            } else {
+                let row_count = state.view.row_count(view_state);
+
+                match event.code {
+                    KeyCode::Left | KeyCode::Char('h') => {
+                        if let Some(selected) = &mut state.selected_cell {
+                            selected.column = selected.column.saturating_sub(1);
+                        } else {
+                            state.selected_cell = Some(SelectedCell {
+                                row: 0,
+                                column: state.columns.len() - 1,
+                                editing: None,
+                            });
+                        }
+                        true
                     }
-                    true
-                }
-                KeyCode::Up | KeyCode::Char('k') => {
-                    if let Some(selected) = &mut state.selected_cell {
-                        selected.row = selected.row.saturating_sub(1);
-                    } else {
-                        state.selected_cell = Some(SelectedCell {
-                            row: row_count - 1,
-                            column: 0,
-                        });
+                    KeyCode::Right | KeyCode::Char('l') => {
+                        if let Some(selected) = &mut state.selected_cell {
+                            selected.column = (selected.column + 1).min(state.columns.len() - 1);
+                        } else {
+                            state.selected_cell = Some(SelectedCell {
+                                row: 0,
+                                column: 0,
+                                editing: None,
+                            });
+                        }
+                        true
                     }
-                    true
-                }
-                KeyCode::Down | KeyCode::Char('j') => {
-                    if let Some(selected) = &mut state.selected_cell {
-                        selected.row = (selected.row + 1).min(row_count - 1);
-                    } else {
-                        state.selected_cell = Some(SelectedCell { row: 0, column: 0 });
+                    KeyCode::Up | KeyCode::Char('k') => {
+                        if let Some(selected) = &mut state.selected_cell {
+                            selected.row = selected.row.saturating_sub(1);
+                        } else {
+                            state.selected_cell = Some(SelectedCell {
+                                row: row_count - 1,
+                                column: 0,
+                                editing: None,
+                            });
+                        }
+                        true
                     }
-                    true
+                    KeyCode::Down | KeyCode::Char('j') => {
+                        if let Some(selected) = &mut state.selected_cell {
+                            selected.row = (selected.row + 1).min(row_count - 1);
+                        } else {
+                            state.selected_cell = Some(SelectedCell {
+                                row: 0,
+                                column: 0,
+                                editing: None,
+                            });
+                        }
+                        true
+                    }
+                    KeyCode::Enter => {
+                        if let Some(selected) = &mut state.selected_cell {
+                            selected.editing = Some(
+                                match state.view.cell(view_state, selected.row, selected.column) {
+                                    Cell::Text(text) => {
+                                        let mut input = Input::new(text.to_string());
+                                        let state = Box::new(wraptatui::init(&mut |p| {
+                                            textbox(p, &mut input)
+                                        }));
+
+                                        (CellUpdate::Text(input), state)
+                                    }
+                                },
+                            )
+                        }
+                        true
+                    }
+                    _ => false,
                 }
-                _ => false,
             }
         },
     )
