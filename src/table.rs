@@ -43,15 +43,20 @@ pub fn table<'a, S: 'static>(
 
             let row_count = state.view.row_count(view_state);
             // TODO: handle overscroll when resizing and scroll offset being larger than row count
-            let visible_rows = (row_count - state.scroll_offset).min(area.height as usize);
+            let visible_rows = (row_count - state.scroll_offset).min(area.height as usize - 1);
 
             for (column, area) in areas.iter().enumerate() {
+                let mut label_area = *area;
+                label_area.height = 1;
+
+                (&state.columns[column].label).render(label_area, buffer);
+
                 for i in 0..visible_rows {
                     let row = i + state.scroll_offset;
                     let mut area = *area;
 
                     area.height = 1;
-                    area.y += i as u16;
+                    area.y += i as u16 + 1;
 
                     match state.view.cell(view_state, row, column) {
                         crate::Cell::Text(text) => text.render(area, buffer),
