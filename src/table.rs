@@ -1,5 +1,7 @@
+use crossterm::event::KeyCode;
 use ratatui::{
     layout::{Constraint, Layout},
+    style::{Color, Style},
     widgets::Widget,
 };
 use wraptatui::{Pass, PassReturn};
@@ -58,6 +60,19 @@ pub fn table<'a, S: 'static>(
                     area.height = 1;
                     area.y += i as u16 + 1;
 
+                    if let Some(selected) = &state.selected_cell
+                        && selected.row == row
+                        && selected.column == column
+                    {
+                        buffer.set_style(
+                            area,
+                            Style {
+                                bg: Some(Color::Blue),
+                                ..Default::default()
+                            },
+                        );
+                    }
+
                     match state.view.cell(view_state, row, column) {
                         crate::Cell::Text(text) => text.render(area, buffer),
                     }
@@ -66,6 +81,50 @@ pub fn table<'a, S: 'static>(
 
             None
         },
-        |view_state, state, event| false,
+        |view_state, state, event| {
+            let row_count = state.view.row_count(view_state);
+
+            match event.code {
+                KeyCode::Left | KeyCode::Char('h') => {
+                    if let Some(selected) = &mut state.selected_cell {
+                        selected.column = selected.column.saturating_sub(1);
+                    } else {
+                        state.selected_cell = Some(SelectedCell {
+                            row: 0,
+                            column: state.columns.len() - 1,
+                        });
+                    }
+                    true
+                }
+                KeyCode::Right | KeyCode::Char('l') => {
+                    if let Some(selected) = &mut state.selected_cell {
+                        selected.column = (selected.column + 1).min(state.columns.len() - 1);
+                    } else {
+                        state.selected_cell = Some(SelectedCell { row: 0, column: 0 });
+                    }
+                    true
+                }
+                KeyCode::Up | KeyCode::Char('k') => {
+                    if let Some(selected) = &mut state.selected_cell {
+                        selected.row = selected.row.saturating_sub(1);
+                    } else {
+                        state.selected_cell = Some(SelectedCell {
+                            row: row_count - 1,
+                            column: 0,
+                        });
+                    }
+                    true
+                }
+                KeyCode::Down | KeyCode::Char('j') => {
+                    if let Some(selected) = &mut state.selected_cell {
+                        selected.row = (selected.row + 1).min(row_count - 1);
+                    } else {
+                        state.selected_cell = Some(SelectedCell { row: 0, column: 0 });
+                    }
+                    true
+                }
+                _ => false,
+            }
+        },
     )
 }
