@@ -3,13 +3,14 @@ use wraptatui::{
     widgets::{state::state, textbox::Input},
 };
 
-use crate::table::table;
+use crate::{database::Database, table::table};
 
 mod database;
 mod table;
 
 pub enum Cell<'a> {
     Text(&'a str),
+    Link,
 }
 
 pub enum CellUpdate {
@@ -109,8 +110,9 @@ impl TableView for TestData {
 
 fn main() {
     run(&mut |p| {
-        state(p, &mut |p, data: &mut ()| {
-            table(p, data, || Box::new(TestData::default()))
+        state(p, &mut |p, data: &mut Database| {
+            // table(p, data, || Box::new(TestData::default()))
+            table(p, data, || Box::new(database::MainView {}))
         })
     })
     .unwrap();

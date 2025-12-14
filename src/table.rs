@@ -95,6 +95,7 @@ pub fn table<'a, S: 'static>(
 
                     match state.view.cell(view_state, row, column) {
                         crate::Cell::Text(text) => text.render(area, buffer),
+                        crate::Cell::Link => "Open".render(area, buffer),
                     }
                 }
             }
@@ -142,7 +143,8 @@ pub fn table<'a, S: 'static>(
                     }
                     KeyCode::Right | KeyCode::Char('l') => {
                         if let Some(selected) = &mut state.selected_cell {
-                            selected.column = (selected.column + 1).min(state.columns.len() - 1);
+                            selected.column =
+                                (selected.column + 1).min(state.columns.len().saturating_sub(1));
                         } else {
                             state.selected_cell = Some(SelectedCell {
                                 row: 0,
@@ -166,7 +168,7 @@ pub fn table<'a, S: 'static>(
                     }
                     KeyCode::Down | KeyCode::Char('j') => {
                         if let Some(selected) = &mut state.selected_cell {
-                            selected.row = (selected.row + 1).min(row_count - 1);
+                            selected.row = (selected.row + 1).min(row_count.saturating_sub(1));
                         } else {
                             state.selected_cell = Some(SelectedCell {
                                 row: 0,
@@ -174,6 +176,10 @@ pub fn table<'a, S: 'static>(
                                 editing: None,
                             });
                         }
+                        true
+                    }
+                    KeyCode::Char('n') => {
+                        state.view.new_row(view_state);
                         true
                     }
                     KeyCode::Enter => {
@@ -188,6 +194,7 @@ pub fn table<'a, S: 'static>(
 
                                         (CellUpdate::Text(input), state)
                                     }
+                                    _ => todo!(),
                                 },
                             )
                         }
