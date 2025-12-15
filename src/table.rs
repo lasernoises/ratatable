@@ -182,7 +182,7 @@ pub fn table<'a, S: 'static>(
                         state.view.new_row(view_state);
                         true
                     }
-                    KeyCode::Enter => {
+                    KeyCode::Char('i') | KeyCode::Enter => {
                         if let Some(selected) = &mut state.selected_cell {
                             selected.editing = Some(
                                 match state.view.cell(view_state, selected.row, selected.column) {
