@@ -155,6 +155,10 @@ impl TableView for TableSchemaView {
             content: ColumnContent::Bool(vec![false; table.row_ids.len()]),
         });
     }
+
+    fn back(&mut self, _: &mut Self::State) -> Option<Box<dyn TableView<State = Self::State>>> {
+        Some(Box::new(MainView {}))
+    }
 }
 
 pub struct TableContentView {
@@ -203,5 +207,9 @@ impl TableView for TableContentView {
         column: usize,
     ) -> Box<dyn TableView<State = Self::State>> {
         todo!()
+    }
+
+    fn back(&mut self, _: &mut Self::State) -> Option<Box<dyn TableView<State = Self::State>>> {
+        Some(Box::new(MainView {}))
     }
 }

@@ -204,6 +204,15 @@ pub fn table<'a, S: 'static>(
                         }
                         true
                     }
+                    KeyCode::Backspace => {
+                        if let Some(view) = state.view.back(view_state) {
+                            state.view = view;
+                            state.columns = state.view.columns(view_state);
+                            true
+                        } else {
+                            false
+                        }
+                    }
                     _ => false,
                 }
             }

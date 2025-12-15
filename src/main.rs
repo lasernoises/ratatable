@@ -53,6 +53,11 @@ pub trait TableView {
     ) -> Box<dyn TableView<State = Self::State>> {
         unreachable!()
     }
+
+    #[allow(unused_variables)]
+    fn back(&mut self, state: &mut Self::State) -> Option<Box<dyn TableView<State = Self::State>>> {
+        None
+    }
 }
 
 fn main() {
