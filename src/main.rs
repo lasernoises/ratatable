@@ -17,6 +17,14 @@ pub enum CellUpdate {
     Text(Input),
 }
 
+impl CellUpdate {
+    pub fn as_text(self) -> Input {
+        match self {
+            CellUpdate::Text(input) => input,
+        }
+    }
+}
+
 #[derive(Clone)]
 pub struct Column {
     pub label: String,
@@ -36,12 +44,15 @@ pub trait TableView {
 
     fn new_row(&mut self, state: &mut Self::State);
 
+    #[allow(unused_variables)]
     fn open_cell(
         &mut self,
         state: &mut Self::State,
         row: usize,
         column: usize,
-    ) -> Box<dyn TableView<State = Self::State>>;
+    ) -> Box<dyn TableView<State = Self::State>> {
+        unreachable!()
+    }
 }
 
 fn main() {

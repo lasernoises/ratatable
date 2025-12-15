@@ -92,10 +92,68 @@ impl TableView for MainView {
         column: usize,
     ) -> Box<dyn TableView<State = Self::State>> {
         match column {
-            1 => todo!(),
+            1 => Box::new(TableSchemaView { table_idx: row }),
             2 => Box::new(TableContentView { table_idx: row }),
             _ => unreachable!(),
         }
+    }
+}
+
+pub struct TableSchemaView {
+    table_idx: usize,
+}
+
+impl TableView for TableSchemaView {
+    type State = Database;
+
+    fn columns(&self, _: &Self::State) -> Vec<crate::Column> {
+        vec![
+            crate::Column {
+                label: "Column".to_string(),
+            },
+            crate::Column {
+                label: "Type".to_string(),
+            },
+        ]
+    }
+
+    fn row_count(&self, state: &Self::State) -> usize {
+        state.tables[self.table_idx].columns.len()
+    }
+
+    fn cell<'a>(&'a self, state: &'a Self::State, row: usize, column: usize) -> crate::Cell<'a> {
+        let table = &state.tables[self.table_idx];
+
+        match column {
+            0 => crate::Cell::Text(&table.columns[row].name),
+            1 => crate::Cell::Text("boolean"),
+            _ => unreachable!(),
+        }
+    }
+
+    fn save_cell(
+        &mut self,
+        state: &mut Self::State,
+        row: usize,
+        column: usize,
+        value: crate::CellUpdate,
+    ) {
+        let table = &mut state.tables[self.table_idx];
+
+        match column {
+            0 => {
+                table.columns[row].name = value.as_text().value_and_reset();
+            }
+            _ => unreachable!(),
+        }
+    }
+
+    fn new_row(&mut self, state: &mut Self::State) {
+        let table = &mut state.tables[self.table_idx];
+        table.columns.push(Column {
+            name: String::new(),
+            content: ColumnContent::Bool(vec![false; table.row_ids.len()]),
+        });
     }
 }
 
