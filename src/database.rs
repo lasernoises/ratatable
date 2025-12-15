@@ -87,6 +87,59 @@ impl TableView for MainView {
 
     fn open_cell(
         &mut self,
+        _state: &mut Self::State,
+        row: usize,
+        column: usize,
+    ) -> Box<dyn TableView<State = Self::State>> {
+        match column {
+            1 => todo!(),
+            2 => Box::new(TableContentView { table_idx: row }),
+            _ => unreachable!(),
+        }
+    }
+}
+
+pub struct TableContentView {
+    table_idx: usize,
+}
+
+impl TableView for TableContentView {
+    type State = Database;
+
+    fn columns(&self, state: &Self::State) -> Vec<crate::Column> {
+        state.tables[self.table_idx]
+            .columns
+            .iter()
+            .map(|col| crate::Column {
+                label: col.name.clone(),
+            })
+            .collect()
+    }
+
+    fn row_count(&self, state: &Self::State) -> usize {
+        state.tables[self.table_idx].row_ids.len()
+    }
+
+    fn cell<'a>(&'a self, state: &'a Self::State, row: usize, column: usize) -> crate::Cell<'a> {
+        todo!()
+    }
+
+    fn save_cell(
+        &mut self,
+        state: &mut Self::State,
+        row: usize,
+        column: usize,
+        value: crate::CellUpdate,
+    ) {
+        todo!()
+    }
+
+    fn new_row(&mut self, state: &mut Self::State) {
+        todo!()
+    }
+
+    fn open_cell(
+        &mut self,
         state: &mut Self::State,
         row: usize,
         column: usize,

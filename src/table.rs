@@ -184,19 +184,23 @@ pub fn table<'a, S: 'static>(
                     }
                     KeyCode::Char('i') | KeyCode::Enter => {
                         if let Some(selected) = &mut state.selected_cell {
-                            selected.editing = Some(
-                                match state.view.cell(view_state, selected.row, selected.column) {
-                                    Cell::Text(text) => {
-                                        let mut input = Input::new(text.to_string());
-                                        let state = Box::new(wraptatui::init(&mut |p| {
-                                            textbox(p, &mut input)
-                                        }));
+                            match state.view.cell(view_state, selected.row, selected.column) {
+                                Cell::Text(text) => {
+                                    let mut input = Input::new(text.to_string());
+                                    let state =
+                                        Box::new(wraptatui::init(&mut |p| textbox(p, &mut input)));
 
-                                        (CellUpdate::Text(input), state)
-                                    }
-                                    _ => todo!(),
-                                },
-                            )
+                                    selected.editing = Some((CellUpdate::Text(input), state));
+                                }
+                                Cell::Link => {
+                                    state.view = state.view.open_cell(
+                                        view_state,
+                                        selected.row,
+                                        selected.column,
+                                    );
+                                    state.columns = state.view.columns(view_state);
+                                }
+                            }
                         }
                         true
                     }
