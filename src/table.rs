@@ -212,6 +212,7 @@ pub fn table<'a, S: 'static>(
                                         selected.column,
                                     );
                                     state.columns = state.view.columns(view_state);
+                                    state.selected_cell = None;
                                 }
                             }
                         }
