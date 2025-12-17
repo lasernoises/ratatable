@@ -10,17 +10,27 @@ mod table;
 
 pub enum Cell<'a> {
     Text(&'a str),
+    Checkbox(bool),
     Link,
 }
 
 pub enum CellUpdate {
     Text(Input),
+    Checkbox(bool),
 }
 
 impl CellUpdate {
     pub fn as_text(self) -> Input {
         match self {
             CellUpdate::Text(input) => input,
+            _ => panic!(),
+        }
+    }
+
+    pub fn as_checkbox(self) -> bool {
+        match self {
+            CellUpdate::Checkbox(checked) => checked,
+            _ => panic!(),
         }
     }
 }

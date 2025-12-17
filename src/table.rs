@@ -88,6 +88,7 @@ pub fn table<'a, S: 'static>(
                                     area,
                                     buffer,
                                 ),
+                                CellUpdate::Checkbox(_) => unreachable!(),
                             };
                             continue;
                         }
@@ -95,6 +96,9 @@ pub fn table<'a, S: 'static>(
 
                     match state.view.cell(view_state, row, column) {
                         crate::Cell::Text(text) => text.render(area, buffer),
+                        crate::Cell::Checkbox(checked) => {
+                            if checked { "✓" } else { "" }.render(area, buffer)
+                        }
                         crate::Cell::Link => "Open".render(area, buffer),
                     }
                 }
@@ -112,6 +116,7 @@ pub fn table<'a, S: 'static>(
                         widget_state.downcast_mut().unwrap(),
                         event,
                     ),
+                    CellUpdate::Checkbox(_) => unreachable!(),
                 }) || (match event.code {
                     KeyCode::Esc => {
                         state.view.save_cell(
@@ -191,6 +196,14 @@ pub fn table<'a, S: 'static>(
                                         Box::new(wraptatui::init(&mut |p| textbox(p, &mut input)));
 
                                     selected.editing = Some((CellUpdate::Text(input), state));
+                                }
+                                Cell::Checkbox(checked) => {
+                                    state.view.save_cell(
+                                        view_state,
+                                        selected.row,
+                                        selected.column,
+                                        CellUpdate::Checkbox(!checked),
+                                    );
                                 }
                                 Cell::Link => {
                                     state.view = state.view.open_cell(

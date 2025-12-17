@@ -67,9 +67,7 @@ impl TableView for MainView {
     ) {
         assert!(column == 0);
 
-        state.tables[row].name = match value {
-            crate::CellUpdate::Text(mut input) => input.value_and_reset(),
-        }
+        state.tables[row].name = value.as_text().value_and_reset();
     }
 
     fn new_row(&mut self, state: &mut Self::State) {
@@ -183,7 +181,13 @@ impl TableView for TableContentView {
     }
 
     fn cell<'a>(&'a self, state: &'a Self::State, row: usize, column: usize) -> crate::Cell<'a> {
-        todo!()
+        let table = &state.tables[self.table_idx];
+
+        match &table.columns[column].content {
+            ColumnContent::Bool(items) => crate::Cell::Checkbox(items[row]),
+            ColumnContent::Int(items) => todo!(),
+            ColumnContent::Text(items) => todo!(),
+        }
     }
 
     fn save_cell(
@@ -193,11 +197,28 @@ impl TableView for TableContentView {
         column: usize,
         value: crate::CellUpdate,
     ) {
-        todo!()
+        let table = &mut state.tables[self.table_idx];
+
+        match &mut table.columns[column].content {
+            ColumnContent::Bool(items) => items[row] = value.as_checkbox(),
+            ColumnContent::Int(items) => todo!(),
+            ColumnContent::Text(items) => todo!(),
+        }
     }
 
     fn new_row(&mut self, state: &mut Self::State) {
-        todo!()
+        let table = &mut state.tables[self.table_idx];
+
+        table.row_ids.push(table.next_row_id);
+        table.next_row_id += 1;
+
+        for column in &mut table.columns {
+            match &mut column.content {
+                ColumnContent::Bool(items) => items.push(false),
+                ColumnContent::Int(items) => items.push(0),
+                ColumnContent::Text(items) => items.push(String::new()),
+            }
+        }
     }
 
     fn open_cell(
