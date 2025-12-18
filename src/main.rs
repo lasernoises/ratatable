@@ -1,7 +1,4 @@
-use wraptatui::{
-    run,
-    widgets::{state::state, textbox::Input},
-};
+use wraptatui::{run, widgets::state::state};
 
 use crate::{database::Database, table::table};
 
@@ -11,18 +8,20 @@ mod table;
 pub enum Cell<'a> {
     Text(&'a str),
     Checkbox(bool),
+    Select(&'a str),
     Link,
 }
 
 pub enum CellUpdate {
-    Text(Input),
+    Text(String),
     Checkbox(bool),
+    Select(usize),
 }
 
 impl CellUpdate {
-    pub fn as_text(self) -> Input {
+    pub fn as_text(self) -> String {
         match self {
-            CellUpdate::Text(input) => input,
+            CellUpdate::Text(text) => text,
             _ => panic!(),
         }
     }
@@ -30,6 +29,13 @@ impl CellUpdate {
     pub fn as_checkbox(self) -> bool {
         match self {
             CellUpdate::Checkbox(checked) => checked,
+            _ => panic!(),
+        }
+    }
+
+    pub fn as_select(self) -> usize {
+        match self {
+            CellUpdate::Select(option) => option,
             _ => panic!(),
         }
     }
@@ -55,6 +61,11 @@ pub trait TableView {
     fn new_row(&mut self, state: &mut Self::State);
 
     #[allow(unused_variables)]
+    fn select_options(&self, state: &Self::State, row: usize, column: usize) -> Vec<String> {
+        unreachable!()
+    }
+
+    #[allow(unused_variables)]
     fn open_cell(
         &mut self,
         state: &mut Self::State,
@@ -72,7 +83,7 @@ pub trait TableView {
 
 fn main() {
     run(&mut |p| {
-        state(p, &mut |p, data: &mut Database| {
+        state(p, |p, data: &mut Database| {
             table(p, data, || Box::new(database::MainView {}))
         })
     })

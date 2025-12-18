@@ -2,21 +2,32 @@ use std::any::Any;
 
 use crossterm::event::KeyCode;
 use ratatui::{
-    layout::{Constraint, Layout},
+    layout::{Constraint, Layout, Margin},
     style::{Color, Style},
-    widgets::Widget,
+    widgets::{Block, Clear, List, ListState, Widget},
 };
 use wraptatui::{
-    Pass, PassReturn, draw, handle_key_event,
+    Focus, Focusable, Pass, PassReturn, WidgetState, draw, handle_key_event,
     widgets::textbox::{Input, textbox},
 };
 
 use crate::{Cell, CellUpdate, Column, TableView};
 
+enum Editing {
+    Text {
+        input: Input,
+        state: Box<dyn Any>,
+    },
+    Select {
+        options: Vec<String>,
+        state: ListState,
+    },
+}
+
 pub struct SelectedCell {
     row: usize,
     column: usize,
-    editing: Option<(CellUpdate, Box<dyn Any>)>,
+    editing: Option<Editing>,
 }
 
 pub struct State<S> {
@@ -24,6 +35,13 @@ pub struct State<S> {
     columns: Vec<Column>,
     scroll_offset: usize,
     selected_cell: Option<SelectedCell>,
+}
+
+impl<S: 'static> WidgetState for State<S> {
+    fn reset_focus(&mut self) -> Focusable {
+        self.selected_cell = None;
+        Focusable::Yes
+    }
 }
 
 pub fn table<'a, S: 'static>(
@@ -44,7 +62,7 @@ pub fn table<'a, S: 'static>(
                 selected_cell: None,
             }
         },
-        |view_state, state, area, buffer| {
+        |view_state, state, _focus, area, buffer| {
             let layout = Layout::horizontal(state.columns.iter().map(|_| Constraint::Fill(1)));
 
             let areas = layout.split(area);
@@ -80,15 +98,16 @@ pub fn table<'a, S: 'static>(
                             },
                         );
 
-                        if let Some((update, state)) = &mut selected.editing {
-                            cursor_position = match update {
-                                CellUpdate::Text(input) => draw(
+                        if let Some(editing) = &mut selected.editing {
+                            cursor_position = match editing {
+                                Editing::Text { input, state } => draw(
                                     &mut |p| textbox(p, input),
                                     state.downcast_mut().unwrap(),
+                                    Focus::Focused,
                                     area,
                                     buffer,
                                 ),
-                                CellUpdate::Checkbox(_) => unreachable!(),
+                                Editing::Select { .. } => None,
                             };
                             continue;
                         }
@@ -99,37 +118,107 @@ pub fn table<'a, S: 'static>(
                         crate::Cell::Checkbox(checked) => {
                             if checked { "✓" } else { "" }.render(area, buffer)
                         }
+                        crate::Cell::Select(text) => text.render(area, buffer),
                         crate::Cell::Link => "Open".render(area, buffer),
                     }
                 }
+            }
+
+            match state.selected_cell {
+                Some(SelectedCell {
+                    editing:
+                        Some(Editing::Select {
+                            ref options,
+                            ref mut state,
+                        }),
+                    ..
+                }) => {
+                    let area = area.inner(Margin::new(10, 10));
+
+                    Clear.render(area, buffer);
+
+                    ratatui::widgets::StatefulWidget::render(
+                        List::new(options.iter().map(|s| s as &str))
+                            .highlight_style(Style::new().bg(Color::Blue))
+                            .block(Block::bordered()),
+                        area,
+                        buffer,
+                        state,
+                    );
+                }
+                _ => (),
             }
 
             cursor_position
         },
         |view_state, state, event| {
             if let Some(ref mut selected_cell) = state.selected_cell
-                && let Some((ref mut update, ref mut widget_state)) = selected_cell.editing
+                && let Some(ref mut editing) = selected_cell.editing
             {
-                (match update {
-                    CellUpdate::Text(input) => handle_key_event(
-                        &mut |p| textbox(p, input),
-                        widget_state.downcast_mut().unwrap(),
-                        event,
-                    ),
-                    CellUpdate::Checkbox(_) => unreachable!(),
-                }) || (match event.code {
-                    KeyCode::Esc => {
-                        state.view.save_cell(
-                            view_state,
-                            selected_cell.row,
-                            selected_cell.column,
-                            selected_cell.editing.take().unwrap().0,
-                        );
+                match editing {
+                    Editing::Text {
+                        input,
+                        state: widget_state,
+                    } => {
+                        if !handle_key_event(
+                            &mut |p| textbox(p, input),
+                            widget_state.downcast_mut().unwrap(),
+                            event,
+                        ) {
+                            match event.code {
+                                KeyCode::Esc => {
+                                    state.view.save_cell(
+                                        view_state,
+                                        selected_cell.row,
+                                        selected_cell.column,
+                                        match selected_cell.editing.take().unwrap() {
+                                            Editing::Text { mut input, .. } => {
+                                                CellUpdate::Text(input.value_and_reset())
+                                            }
+                                            _ => unreachable!(),
+                                        },
+                                    );
 
-                        true
+                                    true
+                                }
+                                _ => false,
+                            }
+                        } else {
+                            false
+                        }
                     }
-                    _ => false,
-                })
+                    Editing::Select {
+                        state: list_state, ..
+                    } => match event.code {
+                        KeyCode::Up | KeyCode::Char('k') => {
+                            list_state.select_previous();
+                            true
+                        }
+                        KeyCode::Down | KeyCode::Char('j') => {
+                            list_state.select_next();
+                            true
+                        }
+                        KeyCode::Esc => {
+                            selected_cell.editing = None;
+                            true
+                        }
+                        KeyCode::Enter => {
+                            if let Some(option) = list_state.selected() {
+                                state.view.save_cell(
+                                    view_state,
+                                    selected_cell.row,
+                                    selected_cell.column,
+                                    CellUpdate::Select(option),
+                                );
+                                selected_cell.editing = None;
+                                true
+                            } else {
+                                false
+                            }
+                        }
+                        _ => false,
+                    },
+                }
             } else {
                 let row_count = state.view.row_count(view_state);
 
@@ -195,7 +284,7 @@ pub fn table<'a, S: 'static>(
                                     let state =
                                         Box::new(wraptatui::init(&mut |p| textbox(p, &mut input)));
 
-                                    selected.editing = Some((CellUpdate::Text(input), state));
+                                    selected.editing = Some(Editing::Text { input, state });
                                 }
                                 Cell::Checkbox(checked) => {
                                     state.view.save_cell(
@@ -204,6 +293,16 @@ pub fn table<'a, S: 'static>(
                                         selected.column,
                                         CellUpdate::Checkbox(!checked),
                                     );
+                                }
+                                Cell::Select(_) => {
+                                    selected.editing = Some(Editing::Select {
+                                        options: state.view.select_options(
+                                            view_state,
+                                            selected.row,
+                                            selected.column,
+                                        ),
+                                        state: ListState::default(),
+                                    });
                                 }
                                 Cell::Link => {
                                     state.view = state.view.open_cell(

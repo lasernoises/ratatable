@@ -27,6 +27,34 @@ enum ColumnContent {
     Text(Vec<String>),
 }
 
+impl ColumnContent {
+    fn len(&self) -> usize {
+        match self {
+            ColumnContent::Bool(items) => items.len(),
+            ColumnContent::Int(items) => items.len(),
+            ColumnContent::Text(items) => items.len(),
+        }
+    }
+
+    fn change_to_bool(&mut self) {
+        if !matches!(self, ColumnContent::Bool(_)) {
+            *self = ColumnContent::Bool(vec![false; self.len()])
+        }
+    }
+
+    fn change_to_int(&mut self) {
+        if !matches!(self, ColumnContent::Int(_)) {
+            *self = ColumnContent::Int(vec![0; self.len()])
+        }
+    }
+
+    fn change_to_text(&mut self) {
+        if !matches!(self, ColumnContent::Text(_)) {
+            *self = ColumnContent::Text(vec![String::new(); self.len()])
+        }
+    }
+}
+
 pub struct MainView {}
 
 impl TableView for MainView {
@@ -67,7 +95,7 @@ impl TableView for MainView {
     ) {
         assert!(column == 0);
 
-        state.tables[row].name = value.as_text().value_and_reset();
+        state.tables[row].name = value.as_text();
     }
 
     fn new_row(&mut self, state: &mut Self::State) {
@@ -124,7 +152,11 @@ impl TableView for TableSchemaView {
 
         match column {
             0 => crate::Cell::Text(&table.columns[row].name),
-            1 => crate::Cell::Text("boolean"),
+            1 => crate::Cell::Select(match table.columns[row].content {
+                ColumnContent::Bool(_) => "boolean",
+                ColumnContent::Int(_) => "int",
+                ColumnContent::Text(_) => "text",
+            }),
             _ => unreachable!(),
         }
     }
@@ -140,7 +172,16 @@ impl TableView for TableSchemaView {
 
         match column {
             0 => {
-                table.columns[row].name = value.as_text().value_and_reset();
+                table.columns[row].name = value.as_text();
+            }
+            1 => {
+                let content = &mut table.columns[row].content;
+                match value.as_select() {
+                    0 => content.change_to_bool(),
+                    1 => content.change_to_int(),
+                    2 => content.change_to_text(),
+                    _ => unreachable!(),
+                }
             }
             _ => unreachable!(),
         }
@@ -152,6 +193,12 @@ impl TableView for TableSchemaView {
             name: String::new(),
             content: ColumnContent::Bool(vec![false; table.row_ids.len()]),
         });
+    }
+
+    fn select_options(&self, _state: &Self::State, _row: usize, column: usize) -> Vec<String> {
+        assert!(column == 1);
+
+        vec!["boolean".into(), "int".into(), "text".into()]
     }
 
     fn back(&mut self, _: &mut Self::State) -> Option<Box<dyn TableView<State = Self::State>>> {
@@ -185,8 +232,8 @@ impl TableView for TableContentView {
 
         match &table.columns[column].content {
             ColumnContent::Bool(items) => crate::Cell::Checkbox(items[row]),
-            ColumnContent::Int(items) => todo!(),
-            ColumnContent::Text(items) => todo!(),
+            ColumnContent::Int(items) => crate::Cell::Text(""),
+            ColumnContent::Text(items) => crate::Cell::Text(&items[row]),
         }
     }
 
@@ -202,7 +249,7 @@ impl TableView for TableContentView {
         match &mut table.columns[column].content {
             ColumnContent::Bool(items) => items[row] = value.as_checkbox(),
             ColumnContent::Int(items) => todo!(),
-            ColumnContent::Text(items) => todo!(),
+            ColumnContent::Text(items) => items[row] = value.as_text(),
         }
     }
 
