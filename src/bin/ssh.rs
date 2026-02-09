@@ -1,6 +1,8 @@
 use std::collections::HashMap;
+use std::os::unix::ffi::OsStrExt;
 use std::sync::Arc;
 
+use anyhow::Context;
 use crossterm::event::KeyCode;
 use crossterm::execute;
 use crossterm::terminal::{EnterAlternateScreen, LeaveAlternateScreen};
@@ -70,15 +72,12 @@ impl std::io::Write for TerminalHandle {
 struct AppServer;
 
 impl AppServer {
-    pub async fn run(&mut self) -> Result<(), anyhow::Error> {
+    pub async fn run(&mut self, private_key: russh::keys::PrivateKey) -> Result<(), anyhow::Error> {
         let config = Config {
             inactivity_timeout: Some(std::time::Duration::from_secs(3600)),
             auth_rejection_time: std::time::Duration::from_secs(3),
             auth_rejection_time_initial: Some(std::time::Duration::from_secs(0)),
-            keys: vec![
-                russh::keys::PrivateKey::random(&mut OsRng, russh::keys::Algorithm::Ed25519)
-                    .unwrap(),
-            ],
+            keys: vec![private_key],
             nodelay: true,
             ..Default::default()
         };
@@ -309,7 +308,25 @@ impl Handler for Client {
 }
 
 #[tokio::main]
-async fn main() {
+async fn main() -> Result<(), anyhow::Error> {
     let mut server = AppServer;
-    server.run().await.expect("Failed running server");
+
+    let private_key = std::env::var("RATATABLE_SSH_PRIVATE_KEY")
+        .map(Some)
+        .or_else(|e| match e {
+            std::env::VarError::NotPresent => Ok(None),
+            std::env::VarError::NotUnicode(_) => Err(e),
+        })?
+        .map(|key| {
+            russh::keys::PrivateKey::from_openssh(key).context("Failed parsing SSH private key")
+        })
+        .transpose()?
+        .map_or_else(
+            || russh::keys::PrivateKey::random(&mut OsRng, russh::keys::Algorithm::Ed25519),
+            Ok,
+        )?;
+
+    server.run(private_key).await?;
+
+    Ok(())
 }
