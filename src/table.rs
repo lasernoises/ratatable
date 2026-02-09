@@ -114,10 +114,10 @@ pub fn table<'a, S: 'static>(
                     }
 
                     match state.view.cell(view_state, row, column) {
-                        crate::Cell::Text(text) => text.render(area, buffer),
                         crate::Cell::Checkbox(checked) => {
                             if checked { "✓" } else { "" }.render(area, buffer)
                         }
+                        crate::Cell::Text(text) => text.render(area, buffer),
                         crate::Cell::Select(text) => text.render(area, buffer),
                         crate::Cell::Link => "Open".render(area, buffer),
                     }
@@ -279,13 +279,6 @@ pub fn table<'a, S: 'static>(
                     KeyCode::Char('i') | KeyCode::Enter => {
                         if let Some(selected) = &mut state.selected_cell {
                             match state.view.cell(view_state, selected.row, selected.column) {
-                                Cell::Text(text) => {
-                                    let mut input = Input::new(text.to_string());
-                                    let state =
-                                        Box::new(wraptatui::init(&mut |p| textbox(p, &mut input)));
-
-                                    selected.editing = Some(Editing::Text { input, state });
-                                }
                                 Cell::Checkbox(checked) => {
                                     state.view.save_cell(
                                         view_state,
@@ -293,6 +286,13 @@ pub fn table<'a, S: 'static>(
                                         selected.column,
                                         CellUpdate::Checkbox(!checked),
                                     );
+                                }
+                                Cell::Text(text) => {
+                                    let mut input = Input::new(text.to_string());
+                                    let state =
+                                        Box::new(wraptatui::init(&mut |p| textbox(p, &mut input)));
+
+                                    selected.editing = Some(Editing::Text { input, state });
                                 }
                                 Cell::Select(_) => {
                                     selected.editing = Some(Editing::Select {

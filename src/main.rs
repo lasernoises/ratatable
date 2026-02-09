@@ -6,29 +6,29 @@ mod database;
 mod table;
 
 pub enum Cell<'a> {
-    Text(&'a str),
     Checkbox(bool),
+    Text(&'a str),
     Select(&'a str),
     Link,
 }
 
 pub enum CellUpdate {
-    Text(String),
     Checkbox(bool),
+    Text(String),
     Select(usize),
 }
 
 impl CellUpdate {
-    pub fn as_text(self) -> String {
+    pub fn as_checkbox(self) -> bool {
         match self {
-            CellUpdate::Text(text) => text,
+            CellUpdate::Checkbox(checked) => checked,
             _ => panic!(),
         }
     }
 
-    pub fn as_checkbox(self) -> bool {
+    pub fn as_text(self) -> String {
         match self {
-            CellUpdate::Checkbox(checked) => checked,
+            CellUpdate::Text(text) => text,
             _ => panic!(),
         }
     }
