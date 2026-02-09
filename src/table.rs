@@ -42,6 +42,7 @@ pub struct State<S> {
     scroll_offset: usize,
     selected_cell: Option<SelectedCell>,
     text_buffer: String,
+    help_open: bool,
 }
 
 impl<S: 'static> WidgetState for State<S> {
@@ -68,6 +69,7 @@ pub fn table<'a, S: 'static>(
                 scroll_offset: 0,
                 selected_cell: None,
                 text_buffer: String::new(),
+                help_open: true,
             }
         },
         |view_state, state, _focus, area, buffer| {
@@ -85,9 +87,7 @@ pub fn table<'a, S: 'static>(
                 let mut label_area = *area;
                 label_area.height = 1;
 
-                state.columns[column]
-                    .label
-                    .as_str()
+                ratatui::text::Text::styled(&state.columns[column].label, Style::new().bold())
                     .render(label_area, buffer);
 
                 for i in 0..visible_rows {
@@ -149,7 +149,7 @@ pub fn table<'a, S: 'static>(
                         }),
                     ..
                 }) => {
-                    let area = area.inner(Margin::new(10, 10));
+                    let area = area.inner(Margin::new(16, 8));
 
                     Clear.render(area, buffer);
 
@@ -165,10 +165,46 @@ pub fn table<'a, S: 'static>(
                 _ => (),
             }
 
+            if state.help_open {
+                let area = area.inner(Margin::new(16, 8));
+
+                Clear.render(area, buffer);
+
+                ratatui::widgets::Table::new(
+                    [
+                        ratatui::widgets::Row::new(["q", "quit"]),
+                        ratatui::widgets::Row::new(["h, ←", "move selection left"]),
+                        ratatui::widgets::Row::new(["l, →", "move selection right"]),
+                        ratatui::widgets::Row::new(["k, ↑", "move selection up"]),
+                        ratatui::widgets::Row::new(["k, ↓", "move selection up"]),
+                        ratatui::widgets::Row::new(["n", "insert new row"]),
+                        ratatui::widgets::Row::new(["i, ⏎", "edit field, open view or select"]),
+                        ratatui::widgets::Row::new(["backspace", "return to previous view"]),
+                        ratatui::widgets::Row::new(["esc", "close modal"]),
+                        ratatui::widgets::Row::new(["?", "open keybindings"]),
+                    ],
+                    [Constraint::Fill(1), Constraint::Fill(2)],
+                )
+                .header(ratatui::widgets::Row::new([
+                    ratatui::widgets::Cell::from("Key").style(Style::new().bold()),
+                    ratatui::widgets::Cell::from("Action").style(Style::new().bold()),
+                ]))
+                .block(Block::bordered().title("Keybindings"))
+                .render(area, buffer);
+            }
+
             cursor_position
         },
         |view_state, state, event| {
-            if let Some(ref mut selected_cell) = state.selected_cell
+            if state.help_open {
+                match event.code {
+                    KeyCode::Esc => {
+                        state.help_open = false;
+                        true
+                    }
+                    _ => false,
+                }
+            } else if let Some(ref mut selected_cell) = state.selected_cell
                 && let Some(ref mut editing) = selected_cell.editing
             {
                 match editing {
@@ -371,6 +407,10 @@ pub fn table<'a, S: 'static>(
                         } else {
                             false
                         }
+                    }
+                    KeyCode::Char('?') => {
+                        state.help_open = true;
+                        true
                     }
                     _ => false,
                 }
