@@ -15,12 +15,13 @@ internal_port = 2222
 protocol = "tcp"
 
 [[services.ports]]
-port = 2222
+port = 22
 
-[[services.tcp_checks]]
-grace_period = "1s"
-interval = "15s"
-timeout = "2s"
+# Does not seem to work when mapping the port to 22. SSH might be special-cased.
+# [[services.tcp_checks]]
+# grace_period = "1s"
+# interval = "15s"
+# timeout = "2s"
 
 [[vm]]
 memory = '1gb'
