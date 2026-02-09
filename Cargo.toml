@@ -6,5 +6,10 @@ edition = "2024"
 [dependencies]
 color-eyre = "0.6.3"
 crossterm = "0.28.1"
+env_logger = "0.11.8"
+log = "0.4.29"
 ratatui = "0.29.0"
-wraptatui = { path = "../wraptatui" }
+russh = "0.57.0"
+tokio = { version = "1.49.0", features = ["full"] }
+# wraptatui = { path = "../wraptatui" }
+wraptatui = { git = "https://github.com/lasernoises/wraptatui.git" }
