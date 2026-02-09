@@ -21,7 +21,7 @@ enum TextEditingFieldType {
 enum Editing {
     Text {
         input: Input,
-        state: Box<dyn Any>,
+        state: Box<dyn Any + Send>,
         field_type: TextEditingFieldType,
     },
     Select {
@@ -37,7 +37,7 @@ pub struct SelectedCell {
 }
 
 pub struct State<S> {
-    view: Box<dyn TableView<State = S>>,
+    view: Box<dyn TableView<State = S> + Send>,
     columns: Vec<Column>,
     scroll_offset: usize,
     selected_cell: Option<SelectedCell>,
@@ -54,7 +54,7 @@ impl<S: 'static> WidgetState for State<S> {
 pub fn table<'a, S: 'static>(
     pass: Pass<'a>,
     state: &mut S,
-    init: impl Fn() -> Box<dyn TableView<State = S>>,
+    init: impl Fn() -> Box<dyn TableView<State = S> + Send>,
 ) -> PassReturn<'a, State<S>> {
     pass.apply(
         state,
@@ -85,7 +85,10 @@ pub fn table<'a, S: 'static>(
                 let mut label_area = *area;
                 label_area.height = 1;
 
-                (&state.columns[column].label).render(label_area, buffer);
+                state.columns[column]
+                    .label
+                    .as_str()
+                    .render(label_area, buffer);
 
                 for i in 0..visible_rows {
                     let row = i + state.scroll_offset;
@@ -128,7 +131,7 @@ pub fn table<'a, S: 'static>(
                         crate::Cell::Int(int) => {
                             state.text_buffer.clear();
                             write!(&mut state.text_buffer, "{int}").unwrap();
-                            (&state.text_buffer).render(area, buffer);
+                            state.text_buffer.as_str().render(area, buffer);
                         }
                         crate::Cell::Text(text) => text.render(area, buffer),
                         crate::Cell::Select(text) => text.render(area, buffer),

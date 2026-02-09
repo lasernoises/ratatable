@@ -116,7 +116,7 @@ impl TableView for MainView {
         _state: &mut Self::State,
         row: usize,
         column: usize,
-    ) -> Box<dyn TableView<State = Self::State>> {
+    ) -> Box<dyn TableView<State = Self::State> + Send> {
         match column {
             1 => Box::new(TableSchemaView { table_idx: row }),
             2 => Box::new(TableContentView { table_idx: row }),
@@ -201,7 +201,10 @@ impl TableView for TableSchemaView {
         vec!["boolean".into(), "int".into(), "text".into()]
     }
 
-    fn back(&mut self, _: &mut Self::State) -> Option<Box<dyn TableView<State = Self::State>>> {
+    fn back(
+        &mut self,
+        _: &mut Self::State,
+    ) -> Option<Box<dyn TableView<State = Self::State> + Send>> {
         Some(Box::new(MainView {}))
     }
 }
@@ -273,11 +276,14 @@ impl TableView for TableContentView {
         state: &mut Self::State,
         row: usize,
         column: usize,
-    ) -> Box<dyn TableView<State = Self::State>> {
+    ) -> Box<dyn TableView<State = Self::State> + Send> {
         todo!()
     }
 
-    fn back(&mut self, _: &mut Self::State) -> Option<Box<dyn TableView<State = Self::State>>> {
+    fn back(
+        &mut self,
+        _: &mut Self::State,
+    ) -> Option<Box<dyn TableView<State = Self::State> + Send>> {
         Some(Box::new(MainView {}))
     }
 }
