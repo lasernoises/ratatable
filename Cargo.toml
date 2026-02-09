@@ -4,12 +4,15 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
+anyhow = "1.0.101"
 color-eyre = "0.6.3"
-crossterm = "0.28.1"
+crossterm = "0.29.0"
 env_logger = "0.11.8"
 log = "0.4.29"
-ratatui = "0.29.0"
+ratatui = "0.30.0"
 russh = "0.57.0"
+terminput = "0.5.12"
+terminput-crossterm = "0.4.8"
 tokio = { version = "1.49.0", features = ["full"] }
 # wraptatui = { path = "../wraptatui" }
 wraptatui = { git = "https://github.com/lasernoises/wraptatui.git" }
