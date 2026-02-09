@@ -1,4 +1,4 @@
-use std::any::Any;
+use std::{any::Any, fmt::Write};
 
 use crossterm::event::KeyCode;
 use ratatui::{
@@ -13,10 +13,16 @@ use wraptatui::{
 
 use crate::{Cell, CellUpdate, Column, TableView};
 
+enum TextEditingFieldType {
+    Text,
+    Int,
+}
+
 enum Editing {
     Text {
         input: Input,
         state: Box<dyn Any>,
+        field_type: TextEditingFieldType,
     },
     Select {
         options: Vec<String>,
@@ -35,6 +41,7 @@ pub struct State<S> {
     columns: Vec<Column>,
     scroll_offset: usize,
     selected_cell: Option<SelectedCell>,
+    text_buffer: String,
 }
 
 impl<S: 'static> WidgetState for State<S> {
@@ -60,6 +67,7 @@ pub fn table<'a, S: 'static>(
                 columns,
                 scroll_offset: 0,
                 selected_cell: None,
+                text_buffer: String::new(),
             }
         },
         |view_state, state, _focus, area, buffer| {
@@ -100,7 +108,7 @@ pub fn table<'a, S: 'static>(
 
                         if let Some(editing) = &mut selected.editing {
                             cursor_position = match editing {
-                                Editing::Text { input, state } => draw(
+                                Editing::Text { input, state, .. } => draw(
                                     &mut |p| textbox(p, input),
                                     state.downcast_mut().unwrap(),
                                     Focus::Focused,
@@ -116,6 +124,11 @@ pub fn table<'a, S: 'static>(
                     match state.view.cell(view_state, row, column) {
                         crate::Cell::Checkbox(checked) => {
                             if checked { "✓" } else { "" }.render(area, buffer)
+                        }
+                        crate::Cell::Int(int) => {
+                            state.text_buffer.clear();
+                            write!(&mut state.text_buffer, "{int}").unwrap();
+                            (&state.text_buffer).render(area, buffer);
                         }
                         crate::Cell::Text(text) => text.render(area, buffer),
                         crate::Cell::Select(text) => text.render(area, buffer),
@@ -159,6 +172,7 @@ pub fn table<'a, S: 'static>(
                     Editing::Text {
                         input,
                         state: widget_state,
+                        ..
                     } => {
                         if !handle_key_event(
                             &mut |p| textbox(p, input),
@@ -172,9 +186,23 @@ pub fn table<'a, S: 'static>(
                                         selected_cell.row,
                                         selected_cell.column,
                                         match selected_cell.editing.take().unwrap() {
-                                            Editing::Text { mut input, .. } => {
-                                                CellUpdate::Text(input.value_and_reset())
-                                            }
+                                            Editing::Text {
+                                                mut input,
+                                                field_type,
+                                                ..
+                                            } => match field_type {
+                                                TextEditingFieldType::Text => {
+                                                    CellUpdate::Text(input.value_and_reset())
+                                                }
+                                                TextEditingFieldType::Int => {
+                                                    let Ok(value) = input.value_and_reset().parse()
+                                                    else {
+                                                        return false;
+                                                    };
+
+                                                    CellUpdate::Int(value)
+                                                }
+                                            },
                                             _ => unreachable!(),
                                         },
                                     );
@@ -287,12 +315,27 @@ pub fn table<'a, S: 'static>(
                                         CellUpdate::Checkbox(!checked),
                                     );
                                 }
+                                Cell::Int(int) => {
+                                    let mut input = Input::new(int.to_string());
+                                    let state =
+                                        Box::new(wraptatui::init(&mut |p| textbox(p, &mut input)));
+
+                                    selected.editing = Some(Editing::Text {
+                                        input,
+                                        state,
+                                        field_type: TextEditingFieldType::Int,
+                                    });
+                                }
                                 Cell::Text(text) => {
                                     let mut input = Input::new(text.to_string());
                                     let state =
                                         Box::new(wraptatui::init(&mut |p| textbox(p, &mut input)));
 
-                                    selected.editing = Some(Editing::Text { input, state });
+                                    selected.editing = Some(Editing::Text {
+                                        input,
+                                        state,
+                                        field_type: TextEditingFieldType::Text,
+                                    });
                                 }
                                 Cell::Select(_) => {
                                     selected.editing = Some(Editing::Select {

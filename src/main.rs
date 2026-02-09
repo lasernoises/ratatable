@@ -7,6 +7,7 @@ mod table;
 
 pub enum Cell<'a> {
     Checkbox(bool),
+    Int(i64),
     Text(&'a str),
     Select(&'a str),
     Link,
@@ -14,6 +15,7 @@ pub enum Cell<'a> {
 
 pub enum CellUpdate {
     Checkbox(bool),
+    Int(i64),
     Text(String),
     Select(usize),
 }
@@ -22,6 +24,13 @@ impl CellUpdate {
     pub fn as_checkbox(self) -> bool {
         match self {
             CellUpdate::Checkbox(checked) => checked,
+            _ => panic!(),
+        }
+    }
+
+    fn as_int(self) -> i64 {
+        match self {
+            CellUpdate::Int(int) => int,
             _ => panic!(),
         }
     }

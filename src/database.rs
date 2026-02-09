@@ -232,7 +232,7 @@ impl TableView for TableContentView {
 
         match &table.columns[column].content {
             ColumnContent::Bool(items) => crate::Cell::Checkbox(items[row]),
-            ColumnContent::Int(items) => crate::Cell::Text(""),
+            ColumnContent::Int(items) => crate::Cell::Int(items[row]),
             ColumnContent::Text(items) => crate::Cell::Text(&items[row]),
         }
     }
@@ -248,7 +248,7 @@ impl TableView for TableContentView {
 
         match &mut table.columns[column].content {
             ColumnContent::Bool(items) => items[row] = value.as_checkbox(),
-            ColumnContent::Int(items) => todo!(),
+            ColumnContent::Int(items) => items[row] = value.as_int(),
             ColumnContent::Text(items) => items[row] = value.as_text(),
         }
     }
