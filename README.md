@@ -1,5 +1,5 @@
 # Ratatable
 
 ```sh
-ssh ratatable.fly.dev
+ssh ratatable.lasernoises.com
 ```
