@@ -106,10 +106,10 @@ impl TableView for MainView {
                 label: "Table".to_string(),
             },
             crate::Column {
-                label: "Schema".to_string(),
+                label: "Content".to_string(),
             },
             crate::Column {
-                label: "Content".to_string(),
+                label: "Schema".to_string(),
             },
         ]
     }
@@ -160,8 +160,8 @@ impl TableView for MainView {
         column: usize,
     ) -> Box<dyn TableView<State = Self::State> + Send> {
         match column {
-            1 => Box::new(TableSchemaView { table_idx: row }),
-            2 => Box::new(TableContentView { table_idx: row }),
+            1 => Box::new(TableContentView { table_idx: row }),
+            2 => Box::new(TableSchemaView { table_idx: row }),
             _ => unreachable!(),
         }
     }
