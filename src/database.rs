@@ -1,11 +1,20 @@
+use std::{
+    fs::File,
+    io::BufWriter,
+    path::{Path, PathBuf},
+};
+
+use serde::{Deserialize, Serialize};
+
 use crate::TableView;
 
-#[derive(Default)]
+#[derive(Default, Serialize, Deserialize)]
 pub struct Database {
     tables: Vec<Table>,
     next_table_id: u32,
 }
 
+#[derive(Serialize, Deserialize)]
 pub struct Table {
     id: u32,
     name: String,
@@ -16,11 +25,13 @@ pub struct Table {
     sort_index: Vec<u32>,
 }
 
+#[derive(Serialize, Deserialize)]
 pub struct Column {
     name: String,
     content: ColumnContent,
 }
 
+#[derive(Serialize, Deserialize)]
 enum ColumnContent {
     Bool(Vec<bool>),
     Int(Vec<i64>),
@@ -55,10 +66,39 @@ impl ColumnContent {
     }
 }
 
+#[derive(Default)]
+pub struct State {
+    db: Database,
+    save_path: Option<PathBuf>,
+}
+
+impl State {
+    pub fn load(path: &Path) -> Self {
+        State {
+            db: Database::default(),
+            save_path: Some(path.to_path_buf()),
+        }
+    }
+
+    fn save(&mut self) {
+        if let Some(path) = &self.save_path {
+            // TODO: We're currently not calling this codepath in the ssh server where we use tokio,
+            // so blocking I/O here isn't a problem practically speaking. But given that we'll
+            // eventually want persistent storage in some form in the SSH server we should probably
+            // make the TableView functions async.
+            //
+            // Also we'll need to handle I/O errors in some way. Probably we should display a prompt
+            // or something like that. This will need to be handled through the TableView interface
+            // as well.
+            serde_json::to_writer(BufWriter::new(File::create(path).unwrap()), &self.db).unwrap();
+        }
+    }
+}
+
 pub struct MainView {}
 
 impl TableView for MainView {
-    type State = Database;
+    type State = State;
 
     fn columns(&self, state: &Self::State) -> Vec<crate::Column> {
         vec![
@@ -75,12 +115,12 @@ impl TableView for MainView {
     }
 
     fn row_count(&self, state: &Self::State) -> usize {
-        state.tables.len()
+        state.db.tables.len()
     }
 
     fn cell<'a>(&'a self, state: &'a Self::State, row: usize, column: usize) -> crate::Cell<'a> {
         match column {
-            0 => crate::Cell::Text(&state.tables[row].name),
+            0 => crate::Cell::Text(&state.db.tables[row].name),
             1 | 2 => crate::Cell::Link,
             _ => unreachable!(),
         }
@@ -95,12 +135,13 @@ impl TableView for MainView {
     ) {
         assert!(column == 0);
 
-        state.tables[row].name = value.as_text();
+        state.db.tables[row].name = value.as_text();
+        state.save();
     }
 
     fn new_row(&mut self, state: &mut Self::State) {
-        state.tables.push(Table {
-            id: state.next_table_id,
+        state.db.tables.push(Table {
+            id: state.db.next_table_id,
             name: String::new(),
             row_ids: Vec::new(),
             next_row_id: 0,
@@ -108,7 +149,8 @@ impl TableView for MainView {
             sort_index: Vec::new(),
         });
 
-        state.next_table_id += 1;
+        state.db.next_table_id += 1;
+        state.save();
     }
 
     fn open_cell(
@@ -130,7 +172,7 @@ pub struct TableSchemaView {
 }
 
 impl TableView for TableSchemaView {
-    type State = Database;
+    type State = State;
 
     fn columns(&self, _: &Self::State) -> Vec<crate::Column> {
         vec![
@@ -144,11 +186,11 @@ impl TableView for TableSchemaView {
     }
 
     fn row_count(&self, state: &Self::State) -> usize {
-        state.tables[self.table_idx].columns.len()
+        state.db.tables[self.table_idx].columns.len()
     }
 
     fn cell<'a>(&'a self, state: &'a Self::State, row: usize, column: usize) -> crate::Cell<'a> {
-        let table = &state.tables[self.table_idx];
+        let table = &state.db.tables[self.table_idx];
 
         match column {
             0 => crate::Cell::Text(&table.columns[row].name),
@@ -168,7 +210,7 @@ impl TableView for TableSchemaView {
         column: usize,
         value: crate::CellUpdate,
     ) {
-        let table = &mut state.tables[self.table_idx];
+        let table = &mut state.db.tables[self.table_idx];
 
         match column {
             0 => {
@@ -185,14 +227,17 @@ impl TableView for TableSchemaView {
             }
             _ => unreachable!(),
         }
+
+        state.save();
     }
 
     fn new_row(&mut self, state: &mut Self::State) {
-        let table = &mut state.tables[self.table_idx];
+        let table = &mut state.db.tables[self.table_idx];
         table.columns.push(Column {
             name: String::new(),
             content: ColumnContent::Bool(vec![false; table.row_ids.len()]),
         });
+        state.save();
     }
 
     fn select_options(&self, _state: &Self::State, _row: usize, column: usize) -> Vec<String> {
@@ -214,10 +259,10 @@ pub struct TableContentView {
 }
 
 impl TableView for TableContentView {
-    type State = Database;
+    type State = State;
 
     fn columns(&self, state: &Self::State) -> Vec<crate::Column> {
-        state.tables[self.table_idx]
+        state.db.tables[self.table_idx]
             .columns
             .iter()
             .map(|col| crate::Column {
@@ -227,11 +272,11 @@ impl TableView for TableContentView {
     }
 
     fn row_count(&self, state: &Self::State) -> usize {
-        state.tables[self.table_idx].row_ids.len()
+        state.db.tables[self.table_idx].row_ids.len()
     }
 
     fn cell<'a>(&'a self, state: &'a Self::State, row: usize, column: usize) -> crate::Cell<'a> {
-        let table = &state.tables[self.table_idx];
+        let table = &state.db.tables[self.table_idx];
 
         match &table.columns[column].content {
             ColumnContent::Bool(items) => crate::Cell::Checkbox(items[row]),
@@ -247,17 +292,19 @@ impl TableView for TableContentView {
         column: usize,
         value: crate::CellUpdate,
     ) {
-        let table = &mut state.tables[self.table_idx];
+        let table = &mut state.db.tables[self.table_idx];
 
         match &mut table.columns[column].content {
             ColumnContent::Bool(items) => items[row] = value.as_checkbox(),
             ColumnContent::Int(items) => items[row] = value.as_int(),
             ColumnContent::Text(items) => items[row] = value.as_text(),
         }
+
+        state.save();
     }
 
     fn new_row(&mut self, state: &mut Self::State) {
-        let table = &mut state.tables[self.table_idx];
+        let table = &mut state.db.tables[self.table_idx];
 
         table.row_ids.push(table.next_row_id);
         table.next_row_id += 1;
@@ -269,6 +316,8 @@ impl TableView for TableContentView {
                 ColumnContent::Text(items) => items.push(String::new()),
             }
         }
+
+        state.save();
     }
 
     fn open_cell(

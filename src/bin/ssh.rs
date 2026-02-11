@@ -1,12 +1,11 @@
 use std::collections::HashMap;
-use std::os::unix::ffi::OsStrExt;
 use std::sync::Arc;
 
 use anyhow::Context;
 use crossterm::event::KeyCode;
 use crossterm::execute;
 use crossterm::terminal::{EnterAlternateScreen, LeaveAlternateScreen};
-use ratatable::database::Database;
+use ratatable::database;
 use ratatable::table::table;
 use ratatui::backend::CrosstermBackend;
 use ratatui::layout::Rect;
@@ -16,7 +15,7 @@ use russh::keys::ssh_key::rand_core::OsRng;
 use russh::server::*;
 use russh::{Channel, ChannelId, Pty};
 use tokio::sync::mpsc::{Sender, UnboundedSender, unbounded_channel};
-use wraptatui::widgets::state::state;
+use wraptatui::widgets::state::state_with_default;
 use wraptatui::{Pass, PassReturn, draw, handle_key_event, init};
 
 struct TerminalHandle {
@@ -181,16 +180,8 @@ impl Handler for Client {
 
                     let mut terminal = Terminal::with_options(backend, options)?;
 
-                    fn widget<'a>(
-                        p: Pass<'a>,
-                    ) -> PassReturn<
-                        'a,
-                        wraptatui::widgets::state::State<
-                            ratatable::table::State<Database>,
-                            Database,
-                        >,
-                    > {
-                        state(p, |p, data: &mut Database| {
+                    fn widget<'a>(p: Pass<'a>) -> PassReturn<'a, impl Sized + use<>> {
+                        state_with_default(p, |p, data: &mut database::State| {
                             table(p, data, || Box::new(ratatable::database::MainView {}))
                         })
                     }
