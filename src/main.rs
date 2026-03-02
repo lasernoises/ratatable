@@ -1,37 +1,30 @@
 use std::path::PathBuf;
 
 use clap::Parser;
+use color_eyre::eyre::Result;
 use ratatable::{
     database::{self},
     table::table,
 };
-use wraptatui::{run, widgets::state::state};
+use wraptatui::run;
 
 #[derive(Parser)]
 struct Cli {
     path: Option<PathBuf>,
 }
 
-fn main() {
+fn main() -> Result<()> {
     let cli = Cli::parse();
 
-    let mut path = cli.path;
+    let path = cli.path;
 
-    run(&mut |p| {
-        state(
-            p,
-            &mut path,
-            |path| {
-                if let Some(path) = path {
-                    database::State::load(path)
-                } else {
-                    Default::default()
-                }
-            },
-            |p, _, data: &mut database::State| {
-                table(p, data, || Box::new(ratatable::database::MainView {}))
-            },
-        )
-    })
-    .unwrap();
+    let mut data = if let Some(path) = path {
+        database::State::load(&path)?
+    } else {
+        Default::default()
+    };
+
+    run(&mut |p| table(p, &mut data, || Box::new(ratatable::database::MainView {})))?;
+
+    Ok(())
 }

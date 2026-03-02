@@ -4,6 +4,7 @@ use std::{
     path::{Path, PathBuf},
 };
 
+use color_eyre::eyre::Result;
 use serde::{Deserialize, Serialize};
 
 use crate::TableView;
@@ -73,11 +74,13 @@ pub struct State {
 }
 
 impl State {
-    pub fn load(path: &Path) -> Self {
-        State {
-            db: Database::default(),
+    pub fn load(path: &Path) -> Result<Self> {
+        let db = serde_json::from_slice(&std::fs::read(path)?)?;
+
+        Ok(State {
+            db,
             save_path: Some(path.to_path_buf()),
-        }
+        })
     }
 
     fn save(&mut self) {
