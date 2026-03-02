@@ -8,6 +8,7 @@ pub enum Cell<'a> {
     Text(&'a str),
     Select(&'a str),
     Link,
+    Empty,
 }
 
 pub enum CellUpdate {

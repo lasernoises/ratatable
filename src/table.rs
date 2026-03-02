@@ -136,6 +136,7 @@ pub fn table<'a, S: 'static>(
                         crate::Cell::Text(text) => text.render(area, buffer),
                         crate::Cell::Select(text) => text.render(area, buffer),
                         crate::Cell::Link => "Open".render(area, buffer),
+                        crate::Cell::Empty => {}
                     }
                 }
             }
@@ -395,6 +396,7 @@ pub fn table<'a, S: 'static>(
                                     state.columns = state.view.columns(view_state);
                                     state.selected_cell = None;
                                 }
+                                Cell::Empty => {}
                             }
                         }
                         true
