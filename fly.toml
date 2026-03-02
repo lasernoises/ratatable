@@ -24,6 +24,5 @@ port = 22
 # timeout = "2s"
 
 [[vm]]
-memory = '1gb'
 cpus = 1
-memory_mb = 1024
+memory_mb = 256
