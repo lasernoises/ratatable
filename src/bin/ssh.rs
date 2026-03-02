@@ -5,7 +5,6 @@ use anyhow::Context;
 use crossterm::event::KeyCode;
 use crossterm::execute;
 use crossterm::terminal::{EnterAlternateScreen, LeaveAlternateScreen};
-use ratatable::database;
 use ratatable::table::table;
 use ratatui::backend::CrosstermBackend;
 use ratatui::layout::Rect;
@@ -181,8 +180,8 @@ impl Handler for Client {
                     let mut terminal = Terminal::with_options(backend, options)?;
 
                     fn widget<'a>(p: Pass<'a>) -> PassReturn<'a, impl Sized + use<>> {
-                        state_with_default(p, |p, data: &mut database::State| {
-                            table(p, data, || Box::new(ratatable::database::MainView {}))
+                        state_with_default(p, |p, data: &mut ratatable::database_views::State| {
+                            table(p, data, || Box::new(ratatable::database_views::MainView {}))
                         })
                     }
 

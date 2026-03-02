@@ -1,13 +1,6 @@
-use std::{
-    fs::File,
-    io::BufWriter,
-    path::{Path, PathBuf},
-};
+use std::ops::Range;
 
-use color_eyre::eyre::Result;
 use serde::{Deserialize, Serialize};
-
-use crate::TableView;
 
 #[derive(Default, Serialize, Deserialize)]
 pub struct Database {
@@ -39,6 +32,153 @@ enum ColumnContent {
     Text(Vec<String>),
 }
 
+pub enum ColumnType {
+    Bool,
+    Int,
+    Text,
+}
+
+pub enum CellContent<'a> {
+    Bool(bool),
+    Int(i64),
+    Text(&'a str),
+}
+
+pub enum CellContentUpdate {
+    Bool(bool),
+    Int(i64),
+    Text(String),
+}
+
+impl Database {
+    pub fn add_table(&mut self) {
+        self.tables.push(Table {
+            id: self.next_table_id,
+            name: String::new(),
+            row_ids: Vec::new(),
+            next_row_id: 0,
+            columns: Vec::new(),
+            sort_index: Vec::new(),
+        });
+
+        self.next_table_id += 1;
+    }
+
+    pub fn tables_len(&self) -> usize {
+        self.tables.len()
+    }
+
+    pub fn table_name(&self, table_idx: usize) -> &str {
+        &self.tables[table_idx].name
+    }
+
+    pub fn set_table_name(&mut self, table_idx: usize, name: String) {
+        self.tables[table_idx].name = name;
+    }
+
+    pub fn table_columns_len(&self, table_idx: usize) -> usize {
+        self.tables[table_idx].columns.len()
+    }
+
+    pub fn table_column_name(&self, table_idx: usize, column_idx: usize) -> &str {
+        &self.tables[table_idx].columns[column_idx].name
+    }
+
+    pub fn set_table_column_name(&mut self, table_idx: usize, column_idx: usize, name: String) {
+        self.tables[table_idx].columns[column_idx].name = name;
+    }
+
+    pub fn table_column_type(&self, table_idx: usize, column_idx: usize) -> ColumnType {
+        match self.tables[table_idx].columns[column_idx].content {
+            ColumnContent::Bool(_) => ColumnType::Bool,
+            ColumnContent::Int(_) => ColumnType::Int,
+            ColumnContent::Text(_) => ColumnType::Text,
+        }
+    }
+
+    pub fn set_table_column_type(
+        &mut self,
+        table_idx: usize,
+        column_idx: usize,
+        column_type: ColumnType,
+    ) {
+        let column_content = &mut self.tables[table_idx].columns[column_idx].content;
+        match column_type {
+            ColumnType::Bool => column_content.change_to_bool(),
+            ColumnType::Int => column_content.change_to_int(),
+            ColumnType::Text => column_content.change_to_text(),
+        };
+    }
+
+    pub fn add_table_column(&mut self, table_idx: usize) {
+        let table = &mut self.tables[table_idx];
+        table.columns.push(Column {
+            name: String::new(),
+            content: ColumnContent::Bool(vec![false; table.row_ids.len()]),
+        });
+    }
+
+    pub fn table_column_names(&self, table_idx: usize) -> impl Iterator<Item = &str> {
+        self.tables[table_idx].columns.iter().map(|c| &*c.name)
+    }
+
+    pub fn table_row_count(&self, table_idx: usize) -> usize {
+        self.tables[table_idx].row_ids.len()
+    }
+
+    pub fn table_cell_content(
+        &self,
+        table_idx: usize,
+        column_idx: usize,
+        row_idx: usize,
+    ) -> CellContent<'_> {
+        match &self.tables[table_idx].columns[column_idx].content {
+            ColumnContent::Bool(items) => CellContent::Bool(items[row_idx]),
+            ColumnContent::Int(items) => CellContent::Int(items[row_idx]),
+            ColumnContent::Text(items) => CellContent::Text(&items[row_idx]),
+        }
+    }
+
+    pub fn set_table_cell_content(
+        &mut self,
+        table_idx: usize,
+        column_idx: usize,
+        row_idx: usize,
+        update: CellContentUpdate,
+    ) {
+        match (
+            &mut self.tables[table_idx].columns[column_idx].content,
+            update,
+        ) {
+            (ColumnContent::Bool(items), CellContentUpdate::Bool(value)) => {
+                items[row_idx] = value;
+            }
+            (ColumnContent::Int(items), CellContentUpdate::Int(value)) => {
+                items[row_idx] = value;
+            }
+            (ColumnContent::Text(items), CellContentUpdate::Text(value)) => {
+                items[row_idx] = value;
+            }
+            _ => panic!("Update does not match column type!"),
+        }
+    }
+
+    pub fn add_table_row(&mut self, table_idx: usize) {
+        let table = &mut self.tables[table_idx];
+
+        table.row_ids.push(table.next_row_id);
+        table.next_row_id += 1;
+
+        for column in &mut table.columns {
+            match &mut column.content {
+                ColumnContent::Bool(items) => items.push(false),
+                ColumnContent::Int(items) => items.push(0),
+                ColumnContent::Text(items) => items.push(String::new()),
+            }
+        }
+    }
+}
+
 impl ColumnContent {
     fn len(&self) -> usize {
         match self {
@@ -64,278 +204,5 @@ impl ColumnContent {
         if !matches!(self, ColumnContent::Text(_)) {
             *self = ColumnContent::Text(vec![String::new(); self.len()])
         }
-    }
-}
-
-#[derive(Default)]
-pub struct State {
-    db: Database,
-    save_path: Option<PathBuf>,
-}
-
-impl State {
-    pub fn load(path: &Path) -> Result<Self> {
-        let db = serde_json::from_slice(&std::fs::read(path)?)?;
-
-        Ok(State {
-            db,
-            save_path: Some(path.to_path_buf()),
-        })
-    }
-
-    fn save(&mut self) {
-        if let Some(path) = &self.save_path {
-            // TODO: We're currently not calling this codepath in the ssh server where we use tokio,
-            // so blocking I/O here isn't a problem practically speaking. But given that we'll
-            // eventually want persistent storage in some form in the SSH server we should probably
-            // make the TableView functions async.
-            //
-            // Also we'll need to handle I/O errors in some way. Probably we should display a prompt
-            // or something like that. This will need to be handled through the TableView interface
-            // as well.
-            serde_json::to_writer(BufWriter::new(File::create(path).unwrap()), &self.db).unwrap();
-        }
-    }
-}
-
-pub struct MainView {}
-
-impl TableView for MainView {
-    type State = State;
-
-    fn columns(&self, state: &Self::State) -> Vec<crate::Column> {
-        vec![
-            crate::Column {
-                label: "Table".to_string(),
-            },
-            crate::Column {
-                label: "Content".to_string(),
-            },
-            crate::Column {
-                label: "Schema".to_string(),
-            },
-        ]
-    }
-
-    fn row_count(&self, state: &Self::State) -> usize {
-        state.db.tables.len()
-    }
-
-    fn cell<'a>(&'a self, state: &'a Self::State, row: usize, column: usize) -> crate::Cell<'a> {
-        match column {
-            0 => crate::Cell::Text(&state.db.tables[row].name),
-            1 | 2 => crate::Cell::Link,
-            _ => unreachable!(),
-        }
-    }
-
-    fn save_cell(
-        &mut self,
-        state: &mut Self::State,
-        row: usize,
-        column: usize,
-        value: crate::CellUpdate,
-    ) {
-        assert!(column == 0);
-
-        state.db.tables[row].name = value.as_text();
-        state.save();
-    }
-
-    fn new_row(&mut self, state: &mut Self::State) {
-        state.db.tables.push(Table {
-            id: state.db.next_table_id,
-            name: String::new(),
-            row_ids: Vec::new(),
-            next_row_id: 0,
-            columns: Vec::new(),
-            sort_index: Vec::new(),
-        });
-
-        state.db.next_table_id += 1;
-        state.save();
-    }
-
-    fn open_cell(
-        &mut self,
-        _state: &mut Self::State,
-        row: usize,
-        column: usize,
-    ) -> Box<dyn TableView<State = Self::State> + Send> {
-        match column {
-            1 => Box::new(TableContentView { table_idx: row }),
-            2 => Box::new(TableSchemaView { table_idx: row }),
-            _ => unreachable!(),
-        }
-    }
-}
-
-pub struct TableSchemaView {
-    table_idx: usize,
-}
-
-impl TableView for TableSchemaView {
-    type State = State;
-
-    fn columns(&self, _: &Self::State) -> Vec<crate::Column> {
-        vec![
-            crate::Column {
-                label: "Column".to_string(),
-            },
-            crate::Column {
-                label: "Type".to_string(),
-            },
-        ]
-    }
-
-    fn row_count(&self, state: &Self::State) -> usize {
-        state.db.tables[self.table_idx].columns.len()
-    }
-
-    fn cell<'a>(&'a self, state: &'a Self::State, row: usize, column: usize) -> crate::Cell<'a> {
-        let table = &state.db.tables[self.table_idx];
-
-        match column {
-            0 => crate::Cell::Text(&table.columns[row].name),
-            1 => crate::Cell::Select(match table.columns[row].content {
-                ColumnContent::Bool(_) => "boolean",
-                ColumnContent::Int(_) => "int",
-                ColumnContent::Text(_) => "text",
-            }),
-            _ => unreachable!(),
-        }
-    }
-
-    fn save_cell(
-        &mut self,
-        state: &mut Self::State,
-        row: usize,
-        column: usize,
-        value: crate::CellUpdate,
-    ) {
-        let table = &mut state.db.tables[self.table_idx];
-
-        match column {
-            0 => {
-                table.columns[row].name = value.as_text();
-            }
-            1 => {
-                let content = &mut table.columns[row].content;
-                match value.as_select() {
-                    0 => content.change_to_bool(),
-                    1 => content.change_to_int(),
-                    2 => content.change_to_text(),
-                    _ => unreachable!(),
-                }
-            }
-            _ => unreachable!(),
-        }
-
-        state.save();
-    }
-
-    fn new_row(&mut self, state: &mut Self::State) {
-        let table = &mut state.db.tables[self.table_idx];
-        table.columns.push(Column {
-            name: String::new(),
-            content: ColumnContent::Bool(vec![false; table.row_ids.len()]),
-        });
-        state.save();
-    }
-
-    fn select_options(&self, _state: &Self::State, _row: usize, column: usize) -> Vec<String> {
-        assert!(column == 1);
-
-        vec!["boolean".into(), "int".into(), "text".into()]
-    }
-
-    fn back(
-        &mut self,
-        _: &mut Self::State,
-    ) -> Option<Box<dyn TableView<State = Self::State> + Send>> {
-        Some(Box::new(MainView {}))
-    }
-}
-
-pub struct TableContentView {
-    table_idx: usize,
-}
-
-impl TableView for TableContentView {
-    type State = State;
-
-    fn columns(&self, state: &Self::State) -> Vec<crate::Column> {
-        state.db.tables[self.table_idx]
-            .columns
-            .iter()
-            .map(|col| crate::Column {
-                label: col.name.clone(),
-            })
-            .collect()
-    }
-
-    fn row_count(&self, state: &Self::State) -> usize {
-        state.db.tables[self.table_idx].row_ids.len()
-    }
-
-    fn cell<'a>(&'a self, state: &'a Self::State, row: usize, column: usize) -> crate::Cell<'a> {
-        let table = &state.db.tables[self.table_idx];
-
-        match &table.columns[column].content {
-            ColumnContent::Bool(items) => crate::Cell::Checkbox(items[row]),
-            ColumnContent::Int(items) => crate::Cell::Int(items[row]),
-            ColumnContent::Text(items) => crate::Cell::Text(&items[row]),
-        }
-    }
-
-    fn save_cell(
-        &mut self,
-        state: &mut Self::State,
-        row: usize,
-        column: usize,
-        value: crate::CellUpdate,
-    ) {
-        let table = &mut state.db.tables[self.table_idx];
-
-        match &mut table.columns[column].content {
-            ColumnContent::Bool(items) => items[row] = value.as_checkbox(),
-            ColumnContent::Int(items) => items[row] = value.as_int(),
-            ColumnContent::Text(items) => items[row] = value.as_text(),
-        }
-
-        state.save();
-    }
-
-    fn new_row(&mut self, state: &mut Self::State) {
-        let table = &mut state.db.tables[self.table_idx];
-
-        table.row_ids.push(table.next_row_id);
-        table.next_row_id += 1;
-
-        for column in &mut table.columns {
-            match &mut column.content {
-                ColumnContent::Bool(items) => items.push(false),
-                ColumnContent::Int(items) => items.push(0),
-                ColumnContent::Text(items) => items.push(String::new()),
-            }
-        }
-
-        state.save();
-    }
-
-    fn open_cell(
-        &mut self,
-        state: &mut Self::State,
-        row: usize,
-        column: usize,
-    ) -> Box<dyn TableView<State = Self::State> + Send> {
-        todo!()
-    }
-
-    fn back(
-        &mut self,
-        _: &mut Self::State,
-    ) -> Option<Box<dyn TableView<State = Self::State> + Send>> {
-        Some(Box::new(MainView {}))
     }
 }

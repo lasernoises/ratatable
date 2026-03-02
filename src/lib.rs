@@ -1,4 +1,5 @@
 pub mod database;
+pub mod database_views;
 pub mod table;
 
 pub enum Cell<'a> {
